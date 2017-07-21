@@ -6,17 +6,16 @@
 
 double Re=100;
 
-double a_x = 0, b_x = 0.01;
+double a_x = 0, b_x = 1;
 double a_y = 0, b_y = b_x;
-const int n = 2;
+const int n = 10;
 const int m = n;
-
 double hx = (b_x-a_x)/(n);
 double hy = (b_y-a_y)/(m);
 
 const double tau=0.01;
-double T=0.01;
-double CI=10;
+double T=hx;
+double CI=0;
 
 
 
@@ -73,9 +72,9 @@ void FindSpeed(double *u,int N, double h,double t)
             }
             else
             {
-                A[i] =  - 1.0 / (h*h) ;
-                B[i] =  1.0/tau + (2.0)/(h*h);
-                C[i] =  - 1.0 / (h*h);
+                A[i] =  - 1.0 / (h*h) * (1.0/Re);
+                B[i] =  1.0/tau + (2.0)/(h*h)* (1.0/Re);
+                C[i] =  - 1.0 / (h*h)* (1.0/Re);
                 F[i] =  CI + u[i]/tau;
             }
         }
@@ -107,10 +106,7 @@ double Laplas_x(double **u,int i,int j,double h)
 {
     return ((u[i+1][j]-2*u[i][j]+u[i-1][j])/(h*h));
 }
-double RightPart(double x,double y,double t)
-{
-    return 0;
-}
+
 void null(double **u)
 {
     for(int i=0;i<=n;i++)
@@ -133,25 +129,20 @@ double Norm(double **a,int lN,int lM)
     }
     return max;
 }
-
-
-
-
 double U_touch(double t,double y)
 {
     return - (4.0/(b_y*b_y)) * sin(t)*y*y + (4.0/b_y) * sin(t)*y + CI*sin(t);
 }
-double U_right(double t,double y)
+double RightPart(double x,double y,double t)
 {
-    return - (4.0/(b_y*b_y)) * cos(t)*y*y + (4.0/b_y) * cos(t)*y + CI*cos(t) + 2*(4.0/(b_y*b_y))*sin(t);
+    return - (4.0/(b_y*b_y)) * cos(t)*y*y + (4.0/b_y) * cos(t)*y + CI*cos(t) + (  (1.0/Re) * 2*(4.0/(b_y*b_y))*sin(t) );
 }
 double Aprox(double t_1,double t_n,double t_1_2,int i,int j,double *x,double *y)
 {
     return ( U_touch(t_1,y[j]) - U_touch(t_n,y[j]) ) / tau
-    - ( ( U_touch(t_1,y[j+1]) - 2*U_touch(t_1,y[j]) + U_touch(t_1,y[j-1]) )/(hy*hy) + ( U_touch(t_n,y[j+1]) - 2*U_touch(t_n,y[j]) + U_touch(t_n,y[j-1]) )/(hy*hy)  )/2.0
-    - U_right(t_1_2,y[j]);
+    - (1.0/Re) * ( ( U_touch(t_1,y[j+1]) - 2*U_touch(t_1,y[j]) + U_touch(t_1,y[j-1]) )/(hy*hy) + ( U_touch(t_n,y[j+1]) - 2*U_touch(t_n,y[j]) + U_touch(t_n,y[j-1]) )/(hy*hy)  )/2.0
+    - RightPart(0,y[j],t_1_2);
 }
-
 void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,double *y,double t)
 {
     double *u_temp_x=new double[N+1];
@@ -193,10 +184,10 @@ void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,doub
                 }
                 else
                 {
-                    A[j] =  - 1.0 / (hy*hy);
-                    B[j] =  2.0/tau+(2.0)/(hy*hy);
-                    C[j] =  - 1.0 / (hy*hy);
-                    F[j] = RightPart(x[i],y[j],t) + Laplas_x(u_n,i,j,hx) + 2.0*u_n[i][j]/tau;
+                    A[j] =  - 1.0 / (hy*hy)*(1.0/Re);
+                    B[j] =  2.0/tau+(2.0)/(hy*hy)*(1.0/Re);
+                    C[j] =  - 1.0 / (hy*hy)*(1.0/Re);
+                    F[j] = RightPart(x[i],y[j],t) + (1.0/Re)*Laplas_x(u_n,i,j,hx) + 2.0*u_n[i][j]/tau;
                 }
             }
             Solve1(u_temp_y,A,B,C,F,M);
@@ -243,10 +234,10 @@ void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,doub
                 }
                 else
                 {
-                    A[i] =  - 1.0 / (hx*hx);
-                    B[i] =  2.0/tau+(2.0)/(hx*hx);
-                    C[i] =  - 1.0 / (hx*hx);
-                    F[i] = RightPart(x[i],y[j],t)+ Laplas_y(u_1_2,i,j,hy)+2.0*u_1_2[i][j]/tau;
+                    A[i] =  - 1.0 / (hx*hx)*(1.0/Re);
+                    B[i] =  2.0/tau+(2.0)/(hx*hx)*(1.0/Re);
+                    C[i] =  - 1.0 / (hx*hx)*(1.0/Re);
+                    F[i] = RightPart(x[i],y[j],t)+ (1.0/Re)*Laplas_y(u_1_2,i,j,hy)+2.0*u_1_2[i][j]/tau;
                 }
             }
         Solve1(u_temp_x,A,B,C,F,N);
@@ -347,24 +338,26 @@ int main()
             v[i][j]=u[i][j];
         }
 
-
+    /*
     int M=1000;
     double h = (b_y-a_y)/(M);
     double *u_one = new double[M+1];
+    */
     double *u_one_g = new double[m+1];
-    for(int i=0;i<=M;i++){
+    /*for(int i=0;i<=M;i++){
         u_one[i]=0;
-    }
+    }*/
 
     for(int t=0;t<=T;t++)
     {
-        /*for(int i=1;i<n;i++)
+        for(int i=1;i<n;i++)
             for(int j=1;j<m;j++)
             {
                 _u[i][j]=Aprox((t+1)*tau,(t)*tau,(t+1.0/2.0)*tau,i,j,x,y);
             }
-        */
+        printf("Aprox = %lf\n",Norm(_u,n,m));
 
+        /*
         FindSpeed(u_one,M,h,(t+1)*tau);
 
 
@@ -376,19 +369,33 @@ int main()
         {
             u_one_g[i] = u_one_g[i] + tau * F_t();
         }
+        //*/
 
-        SolveTransport(u_one_g,u,u_n,n,m,x,y,(t+1)*tau);
+        printf("\n");
+        for(int i=0;i<=m;i++)
+        {
+            u_one_g[i] = U_touch((t+1)*tau,y[i]);
+            printf("%lf\n",u_one_g[i]);
+        }
+        printf("\n");
+        SolveTransport(u_one_g,u,u_n,n,m,x,y,(t+1.0/2.0)*tau);
 
 
 
-         for(int j=1;j<m;j++){
+        for(int j=1;j<m;j++){
             for(int i=1;i<n;i++){
                 v[i][j]=u[i][j]-u_one_g[j];
             }
         }
 
-        printf("Norm(w) = %lf\n",Norm(v,n,m));
+        printf("Norm(w) = %.14lf\n",Norm(v,n,m));
 
+        printf("\n");
+        for(int i=0;i<=m;i++)
+        {
+            printf("%lf\n",u[2][i]);
+        }
+        printf("\n");
         /*
         printf("\n U PPP\n");
         for(int j=0;j<=m;j++){
@@ -406,8 +413,8 @@ int main()
             printf("\n");
 
         }
-        //*/
 
+        //*/
 
 
     }
