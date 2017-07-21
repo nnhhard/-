@@ -8,15 +8,14 @@ double Re=100;
 
 double a_x = 0, b_x = 1;
 double a_y = 0, b_y = b_x;
-const int n = 10;
+const int n = 1000;
 const int m = n;
 double hx = (b_x-a_x)/(n);
 double hy = (b_y-a_y)/(m);
 
 const double tau=0.01;
 double T=hx;
-double CI=0;
-
+double CI=10;
 
 
 
