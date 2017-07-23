@@ -17,6 +17,41 @@ const double tau=0.01;
 double T=hx;
 double CI=0;
 
+void SolveByScalarRunningWithoutBorders(int lM, double* lU, const double* lA, const double* lB, const double* lC, const double* lF)
+{
+
+    int M = lM;
+    double* u = lU;
+    const double* a = lA;
+    const double* b= lB;
+    const double* c = lC;
+    const double* f = lF;
+
+    double *A = new double[M+1];
+    double *B = new double[M+1];
+
+    A[0] = 0;
+    B[0] = u[0];
+    A[M] = B[M] = 0;
+
+    for (int i=1; i<M; i++)
+    {
+        A[i] = (-c[i])/(a[i]*A[i-1] + b[i]) ;
+        B[i] = (f[i] - a[i]*B[i-1])/(a[i]*A[i-1] + b[i]);
+    }
+
+    for (int i=M-1; i>0; i--)
+    {
+        u[i] = A[i]*u[i+1] + B[i];
+    }
+
+    a=NULL;
+    b=NULL;
+    c=NULL;
+    f=NULL;
+    delete[] A;
+    delete[] B;
+}
 
 
 void Solve1(double *u_temp,double *A,double *C,double *B,double *F,int N)
@@ -127,6 +162,21 @@ double Norm(double **a,int lN,int lM)
     }
     return max;
 }
+double Norm(double *a,int N)
+{
+    double max=fabs(a[0]);
+
+    for(int i=0;i<=N;i++)
+    {
+        if(fabs(a[i])>max)
+        {
+            max=fabs(a[i]);
+        }
+    }
+    return max;
+}
+
+
 double U_touch(double t,double y)
 {
     return - (4.0/(b_y*b_y)) * sin(t)*y*y + (4.0/b_y) * sin(t)*y + CI*sin(t);
@@ -155,8 +205,7 @@ double Aprox_ch_1_2(double **ut_n,double **ut_1_2,double t_1_2,int i,int j,doubl
     - ( (1.0/Re) * ( ( ut_n[i][j+1] - 2*ut_n[i][j] + ut_n[i][j-1] )/(hy*hy)  ) )
     - RightPart(0,y[j],t_1_2);
 }
-
-void SolveTransport(double *S,double **ne,double **u,double **u_n,int N,int M,double *x,double *y,double t)
+void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,double *y,double t)
 {
     double *u_temp_x=new double[N+1];
     double *u_temp_y=new double[M+1];
@@ -165,83 +214,105 @@ void SolveTransport(double *S,double **ne,double **u,double **u_n,int N,int M,do
     for(int i=0;i<=N;i++)
         u_1_2[i]=new double[M+1];
 
-     for(int i=0;i<=N;i++)
+    double** check_aprox=new double*[N+1];
+    for(int i=0;i<=N;i++)
+    {
+        check_aprox[i]=new double[M+1];
+    }
+
+    for(int i=0;i<=N;i++)
         for(int j=0;j<=M;j++)
         {
             u_1_2[i][j]=u_n[i][j];
         }
 
+    double *check=new double[M+1];
 
-        double *A=new double[M+1];
-        double *B=new double[M+1];
-        double *C=new double[M+1];
-        double *F=new double[M+1];
+    double *A=new double[M+1];
+    double *B=new double[M+1];
+    double *C=new double[M+1];
+    double *F=new double[M+1];
+
+    for(int j=0;j<=M;j++)
+    {
+        A[j]=0;
+        B[j]=0;
+        C[j]=0;
+        F[j]=0;
+        check[j]=0;
+    }
+
+    for(int i=1;i<N;i++)
+    {
+        for(int j = 0; j<=M; j++)
+        {
+            if(j == 0)
+            {
+                A[j]=0;
+                B[j]=1;
+                C[j]=0;
+                F[j]=S[j];
+            }
+            else if(j == M)
+            {
+                A[j]=0;
+                B[j]=1;
+                C[j]=0;
+                F[j]=S[j];
+            }
+            else
+            {
+                A[j] =  - 1.0 / (hy*hy)*(1.0/Re);
+                B[j] =  2.0/tau+(2.0)/(hy*hy)*(1.0/Re);
+                C[j] =  - 1.0 / (hy*hy)*(1.0/Re);
+                F[j] = RightPart(x[i],y[j],t) + (1.0/Re)*Laplas_x(u_n,i,j,hx) + 2.0*u_n[i][j]/tau;
+            }
+        }
+        Solve1(u_temp_y,A,B,C,F,M);
+
+        for(int j=1;j<M;j++)
+        {
+            check[j]= A[j]*u_temp_y[j-1]+B[j]*u_temp_y[j]+C[j]*u_temp_y[j+1]-F[j];
+        }
+        printf("CHECK_X = %lf\n",Norm(check,M));
+
+        for(int j=0;j<=M;j++)
+            u_1_2[i][j]=u_temp_y[j];
+
+        }
 
         for(int i=1;i<N;i++)
         {
-            for(int j = 0; j<=M; j++)
-            {
-                if(j == 0)
-                {
-                    A[j]=0;
-                    B[j]=1;
-                    C[j]=0;
-                    F[j]=S[j];
-                }
-                else if(j == M)
-                {
-                    A[j]=0;
-                    B[j]=1;
-                    C[j]=0;
-                    F[j]=S[j];
-                }
-                else
-                {
-                    A[j] =  - 1.0 / (hy*hy)*(1.0/Re);
-                    B[j] =  2.0/tau+(2.0)/(hy*hy)*(1.0/Re);
-                    C[j] =  - 1.0 / (hy*hy)*(1.0/Re);
-                    F[j] = RightPart(x[i],y[j],t) + (1.0/Re)*Laplas_x(u_n,i,j,hx) + 2.0*u_n[i][j]/tau;
-                }
-            }
-            Solve1(u_temp_y,A,B,C,F,M);
-            double *check=new double[M+1];
             for(int j=1;j<M;j++)
             {
-                check[j]= A[j]*u_temp_y[j-1]+B[j]*u_temp_y[j]+C[j]*u_temp_y[j+1]-F[j];
+                check_aprox[i][j]= ( (u_1_2[i][j]-u_n[i][j])/(tau/2.0) )
+                - ( (1.0/Re) * ( Laplas_x(u_n,i,j,hx) + Laplas_y(u_1_2,i,j,hy) ) )
+                - RightPart(x[i],y[j],t);
             }
-            double max=0;
-            for(int j=1;j<M;j++)
-            {
-                if(fabs(check[j])>max)
-                    max=fabs(check[j]);
-            }
-            printf("CHECK = %lf\n",max);
-            delete []check;
-
-            for(int j=0;j<=M;j++)
-                u_1_2[i][j]=u_temp_y[j];
         }
+
+        printf("Norm(check_aprox_1_2) = %.20lf\n",Norm(check_aprox,N,M));
 
         for(int i=0;i<=N;i++)
         {
             for(int j=0;j<=M;j++)
             {
                 u[i][j]=u_1_2[i][j];
-                ne[i][j]=u_1_2[i][j];
-
             }
         }
-
 
         delete []A;
         delete []B;
         delete []C;
         delete []F;
+        delete []check;
+
 
         A=new double[N+1];
         B=new double[N+1];
         C=new double[N+1];
         F=new double[N+1];
+        check=new double[N+1];
 
         for(int j=1;j<M;j++)
         {
@@ -270,6 +341,11 @@ void SolveTransport(double *S,double **ne,double **u,double **u_n,int N,int M,do
                 }
             }
         Solve1(u_temp_x,A,B,C,F,N);
+        for(int j=1;j<M;j++)
+        {
+            check[j]= A[j]*u_temp_x[j-1]+B[j]*u_temp_x[j]+C[j]*u_temp_x[j+1]-F[j];
+        }
+        printf("CHECK_Y = %lf\n",Norm(check,M));
         for(int i=0;i<=N;i++)
             u[i][j]=u_temp_x[i];
         }
@@ -279,6 +355,33 @@ void SolveTransport(double *S,double **ne,double **u,double **u_n,int N,int M,do
             u[i][0]=S[0];
             u[i][M]=S[M];
         }
+
+        for(int i=1;i<N;i++)
+        {
+            for(int j=1;j<M;j++)
+            {
+                check_aprox[i][j]= ( (u[i][j]-u_1_2[i][j])/(tau/2.0) )
+                - ( (1.0/Re) * ( Laplas_x(u,i,j,hx) + Laplas_y(u_1_2,i,j,hy) ) )
+                - RightPart(x[i],y[j],t);
+            }
+        }
+
+        printf("Norm(check_aprox_1) = %.20lf\n",Norm(check_aprox,N,M));
+
+        for(int i=1;i<N;i++)
+        {
+            for(int j=1;j<M;j++)
+            {
+                check_aprox[i][j]= ( (u[i][j]-u_n[i][j])/(tau) )
+                - ( (1.0/Re) * ( Laplas_x(u,i,j,hx) + Laplas_y(u,i,j,hy) ) )
+                - RightPart(x[i],y[j],t);
+            }
+        }
+
+        printf("Norm(check_aprox_ne) = %.20lf\n",Norm(check_aprox,N,M));
+
+
+
 
 
     for(int i=0;i<=N;i++)
@@ -300,7 +403,182 @@ void SolveTransport(double *S,double **ne,double **u,double **u_n,int N,int M,do
     u_temp_x=NULL;
     u_temp_y=NULL;
 }
+void SolveTransport2(double *S,double **u,double **u_n,int N,int M,double *x,double *y,double t)
+{
+    double *u_temp_x=new double[N+1];
+    double *u_temp_y=new double[M+1];
 
+    double **u_1_2=new double*[N+1];
+    for(int i=0;i<=N;i++)
+        u_1_2[i]=new double[M+1];
+
+    double** check_aprox=new double*[N+1];
+    for(int i=0;i<=N;i++)
+    {
+        check_aprox[i]=new double[M+1];
+    }
+
+    for(int i=0;i<=N;i++)
+        for(int j=0;j<=M;j++)
+        {
+            u_1_2[i][j]=0;
+        }
+
+    for(int i=1;i<N;i++)
+    {
+         u[i][0]=S[0];
+         u[i][M]=S[M];
+         u_1_2[i][0]=S[0];
+         u_1_2[i][M]=S[M];
+    }
+
+    for(int j=1;j<M;j++)
+    {
+        u[0][j]=S[j];
+        u[N][j]=S[j];
+        u_1_2[0][j]=S[j];
+        u_1_2[N][j]=S[j];
+    }
+
+
+
+
+    double *check=new double[M+1];
+
+    double *A=new double[M+1];
+    double *B=new double[M+1];
+    double *C=new double[M+1];
+    double *F=new double[M+1];
+
+    for(int j=0;j<=M;j++)
+    {
+        A[j]=0;
+        B[j]=0;
+        C[j]=0;
+        F[j]=0;
+        check[j]=0;
+    }
+
+    for(int i=1;i<N;i++)
+    {
+        for(int j = 1; j<M; j++)
+        {
+            A[j] =  - 1.0 / (hy*hy)*(1.0/Re);
+            B[j] =  2.0/tau+(2.0)/(hy*hy)*(1.0/Re);
+            C[j] =  - 1.0 / (hy*hy)*(1.0/Re);
+            F[j] = RightPart(x[i],y[j],t) + (1.0/Re)*Laplas_x(u_n,i,j,hx) + 2.0*u_n[i][j]/tau;
+        }
+        u_temp_y[0]=u_1_2[i][0];
+        u_temp_y[M]=u_1_2[i][M];
+
+        SolveByScalarRunningWithoutBorders(M,u_temp_y,A,B,C,F);
+
+        for(int j=1;j<M;j++)
+        {
+            check[j]= A[j]*u_temp_y[j-1]+B[j]*u_temp_y[j]+C[j]*u_temp_y[j+1]-F[j];
+        }
+        printf("CHECK_X = %lf\n",Norm(check,M));
+
+        for(int j=1;j<M;j++)
+            u_1_2[i][j]=u_temp_y[j];
+
+        }
+
+        for(int i=1;i<N;i++)
+        {
+            for(int j=1;j<M;j++)
+            {
+                check_aprox[i][j]= ( (u_1_2[i][j]-u_n[i][j])/(tau/2.0) )
+                - ( (1.0/Re) * ( Laplas_x(u_n,i,j,hx) + Laplas_y(u_1_2,i,j,hy) ) )
+                - RightPart(x[i],y[j],t);
+            }
+        }
+
+        printf("Norm(check_aprox_1_2) = %.20lf\n",Norm(check_aprox,N,M));
+
+
+        delete []A;
+        delete []B;
+        delete []C;
+        delete []F;
+        delete []check;
+
+
+        A=new double[N+1];
+        B=new double[N+1];
+        C=new double[N+1];
+        F=new double[N+1];
+        check=new double[N+1];
+
+        for(int j=1;j<M;j++)
+        {
+            for(int i = 0; i<=N; i++)
+            {
+                A[i] =  - 1.0 / (hx*hx)*(1.0/Re);
+                B[i] =  2.0/tau+(2.0)/(hx*hx)*(1.0/Re);
+                C[i] =  - 1.0 / (hx*hx)*(1.0/Re);
+                F[i] = RightPart(x[i],y[j],t)+ (1.0/Re)*Laplas_y(u_1_2,i,j,hy)+2.0*u_1_2[i][j]/tau;
+            }
+
+        u_temp_x[0]=u[0][j];
+        u_temp_x[N]=u[N][j];
+
+        SolveByScalarRunningWithoutBorders(N,u_temp_x,A,B,C,F);
+        for(int j=1;j<M;j++)
+        {
+            check[j]= A[j]*u_temp_x[j-1]+B[j]*u_temp_x[j]+C[j]*u_temp_x[j+1]-F[j];
+        }
+        printf("CHECK_Y = %lf\n",Norm(check,M));
+        for(int i=0;i<=N;i++)
+            u[i][j]=u_temp_x[i];
+        }
+
+        for(int i=1;i<N;i++)
+        {
+            for(int j=1;j<M;j++)
+            {
+                check_aprox[i][j]= ( (u[i][j]-u_1_2[i][j])/(tau/2.0) )
+                - ( (1.0/Re) * ( Laplas_x(u,i,j,hx) + Laplas_y(u_1_2,i,j,hy) ) )
+                - RightPart(x[i],y[j],t);
+            }
+        }
+
+        printf("Norm(check_aprox_1) = %.20lf\n",Norm(check_aprox,N,M));
+
+
+        for(int i=1;i<N;i++)
+        {
+            for(int j=1;j<M;j++)
+            {
+                check_aprox[i][j]= ( (u[i][j]-u_n[i][j])/(tau) )
+                - ( (1.0/Re) * ( Laplas_x(u,i,j,hx) + Laplas_y(u,i,j,hy) ) )
+                - RightPart(x[i],y[j],t);
+            }
+        }
+
+        printf("Norm(check_aprox_ne) = %.20lf\n",Norm(check_aprox,N,M));
+
+
+
+    for(int i=0;i<=N;i++)
+    {
+        delete []u_1_2[i];
+    }
+    delete []u_1_2;
+    delete []A;
+    delete []B;
+    delete []C;
+    delete []F;
+    delete []u_temp_x;
+    delete []u_temp_y;
+    u_1_2=NULL;
+    A=NULL;
+    B=NULL;
+    C=NULL;
+    F=NULL;
+    u_temp_x=NULL;
+    u_temp_y=NULL;
+}
 
 
 int main()
@@ -412,7 +690,7 @@ int main()
             //printf("%lf\n",u_one_g[i]);
         }
         //printf("\n");
-        SolveTransport(u_one_g,u_1_2,u,u_n,n,m,x,y,(t+1.0/2.0)*tau);
+        SolveTransport(u_one_g,u,u_n,n,m,x,y,(t+1.0/2.0)*tau);
         /*for(int i=0;i<=n;i++)
             for(int j=0;j<=m;j++)
             {
@@ -436,6 +714,7 @@ int main()
         }
         printf("\n");
         //*/
+        /*
         for(int i=1;i<n;i++)
             for(int j=1;j<m;j++)
             {
