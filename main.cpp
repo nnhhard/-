@@ -13,9 +13,9 @@ const int m = n;
 double hx = (b_x-a_x)/(n);
 double hy = (b_y-a_y)/(m);
 
-const double tau=0.01;
-double T=hx;
-double CI=0;
+const double tau=hx;
+double T=tau;
+double CI=10;
 
 void SolveByScalarRunningWithoutBorders(int lM, double* lU, const double* lA, const double* lB, const double* lC, const double* lF)
 {
@@ -52,8 +52,6 @@ void SolveByScalarRunningWithoutBorders(int lM, double* lU, const double* lA, co
     delete[] A;
     delete[] B;
 }
-
-
 void Solve1(double *u_temp,double *A,double *C,double *B,double *F,int N)
 {
     double alfa[N+1];
@@ -175,21 +173,27 @@ double Norm(double *a,int N)
     }
     return max;
 }
-
-
 double U_touch(double t,double y)
 {
-    return - (4.0/(b_y*b_y)) * sin(t)*y*y + (4.0/b_y) * sin(t)*y + CI*sin(t);
+    return - (4.0/(b_y*b_y)) * sin(t)*y*y + (4.0/b_y) * sin(t)*y +
+           CI*sin(t);
 }
 double RightPart(double x,double y,double t)
 {
-    return - (4.0/(b_y*b_y)) * cos(t)*y*y + (4.0/b_y) * cos(t)*y + CI*cos(t) + (  (1.0/Re) * 2*(4.0/(b_y*b_y))*sin(t) );
+    return - (4.0/(b_y*b_y)) * cos(t)*y*y + (4.0/b_y) * cos(t)*y +
+           CI*cos(t) + (  (1.0/Re) * 2*(4.0/(b_y*b_y))*sin(t) );
 }
 double Aprox(double t_1,double t_n,double t_1_2,int i,int j,double *x,double *y)
 {
     return ( U_touch(t_1,y[j]) - U_touch(t_n,y[j]) ) / tau
     - (1.0/Re) * ( ( U_touch(t_1,y[j+1]) - 2*U_touch(t_1,y[j]) + U_touch(t_1,y[j-1]) )/(hy*hy) + ( U_touch(t_n,y[j+1]) - 2*U_touch(t_n,y[j]) + U_touch(t_n,y[j-1]) )/(hy*hy)  )/2.0
     - RightPart(0,y[j],t_1_2);
+}
+double Aprox_ne(double t_1,double t_n,double t_1_2,int i,int j,double *x,double *y)
+{
+    return ( U_touch(t_1,y[j]) - U_touch(t_n,y[j]) ) / tau
+    - (1.0/Re) * ( ( U_touch(t_1,y[j+1]) - 2*U_touch(t_1,y[j]) + U_touch(t_1,y[j-1]) )/(hy*hy) )
+    - RightPart(0,y[j],t_1);
 }
 double Aprox_ch(double **ut_1,double **ut_n,double **ut_1_2,double t_1_2,int i,int j,double *x,double *y)
 {
@@ -205,8 +209,20 @@ double Aprox_ch_1_2(double **ut_n,double **ut_1_2,double t_1_2,int i,int j,doubl
     - ( (1.0/Re) * ( ( ut_n[i][j+1] - 2*ut_n[i][j] + ut_n[i][j-1] )/(hy*hy)  ) )
     - RightPart(0,y[j],t_1_2);
 }
-void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,double *y,double t)
+double Operator1d(double * u_temp_y,double *A,double *B,double *C,int i,int j)
 {
+    return A[j]*u_temp_y[j-1]+B[j]*u_temp_y[j]+C[j]*u_temp_y[j+1];
+}
+void SolveTransport(double *S_1,double *S_1_2,double **u,double **u_n,int N,int M,double *x,double *y,double t,double **us_1_2)
+{
+    /*
+    for(int j=0;j<=M;j++)
+    {
+        printf("%e ",S[j]);
+    }
+    printf("\n");
+    */
+
     double *u_temp_x=new double[N+1];
     double *u_temp_y=new double[M+1];
 
@@ -220,11 +236,19 @@ void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,doub
         check_aprox[i]=new double[M+1];
     }
 
+
     for(int i=0;i<=N;i++)
         for(int j=0;j<=M;j++)
         {
-            u_1_2[i][j]=u_n[i][j];
+            u_1_2[i][j]=0;
         }
+
+    for(int j=1;j<M;j++)
+    {
+        u_1_2[0][j]=S_1_2[j];
+        u_1_2[N][j]=S_1_2[j];
+    }
+
 
     double *check=new double[M+1];
 
@@ -251,30 +275,39 @@ void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,doub
                 A[j]=0;
                 B[j]=1;
                 C[j]=0;
-                F[j]=S[j];
+                F[j]=S_1_2[j];
             }
             else if(j == M)
             {
                 A[j]=0;
                 B[j]=1;
                 C[j]=0;
-                F[j]=S[j];
+                F[j]=S_1_2[j];
             }
             else
             {
                 A[j] =  - 1.0 / (hy*hy)*(1.0/Re);
                 B[j] =  2.0/tau+(2.0)/(hy*hy)*(1.0/Re);
                 C[j] =  - 1.0 / (hy*hy)*(1.0/Re);
-                F[j] = RightPart(x[i],y[j],t) + (1.0/Re)*Laplas_x(u_n,i,j,hx) + 2.0*u_n[i][j]/tau;
+                F[j] = RightPart(x[i],y[j],t); //+ (1.0/Re)*Laplas_x(u_n,i,j,hx) + 2.0*u_n[i][j]/tau;
             }
         }
         Solve1(u_temp_y,A,B,C,F,M);
 
-        for(int j=1;j<M;j++)
+        for(int j=0;j<=M;j++)
         {
-            check[j]= A[j]*u_temp_y[j-1]+B[j]*u_temp_y[j]+C[j]*u_temp_y[j+1]-F[j];
+            if(j==0)
+            {
+                check[j]= B[j]*u_temp_y[j]+C[j]*u_temp_y[j+1]-F[j];
+            }
+            else if(j==M)
+            {
+                 check[j]= A[j]*u_temp_y[j-1]+B[j]*u_temp_y[j]-F[j];
+            }
+            else
+                check[j]= A[j]*u_temp_y[j-1]+B[j]*u_temp_y[j]+C[j]*u_temp_y[j+1]-F[j];
         }
-        printf("CHECK_X = %lf\n",Norm(check,M));
+        //printf("CHECK_X = %.20lf\n",Norm(check,M));
 
         for(int j=0;j<=M;j++)
             u_1_2[i][j]=u_temp_y[j];
@@ -291,12 +324,13 @@ void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,doub
             }
         }
 
-        printf("Norm(check_aprox_1_2) = %.20lf\n",Norm(check_aprox,N,M));
+       // printf("Norm(check_aprox_1_2) = %.20lf\n",Norm(check_aprox,N,M));
 
         for(int i=0;i<=N;i++)
         {
             for(int j=0;j<=M;j++)
             {
+                us_1_2[i][j]=u_1_2[i][j];
                 u[i][j]=u_1_2[i][j];
             }
         }
@@ -323,14 +357,14 @@ void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,doub
                     A[i]=0;
                     B[i]=1;
                     C[i]=0;
-                    F[i]=S[j];
+                    F[i]=S_1[j];
                 }
                 else if(i==N)
                 {
                     A[i]=0;
                     B[i]=1;
                     C[i]=0;
-                    F[i]=S[j];
+                    F[i]=S_1[j];
                 }
                 else
                 {
@@ -341,19 +375,28 @@ void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,doub
                 }
             }
         Solve1(u_temp_x,A,B,C,F,N);
-        for(int j=1;j<M;j++)
+        for(int i=0;i<=N;i++)
         {
-            check[j]= A[j]*u_temp_x[j-1]+B[j]*u_temp_x[j]+C[j]*u_temp_x[j+1]-F[j];
+            if(i==0)
+            {
+                check[i]= B[i]*u_temp_x[i]+C[i]*u_temp_x[i+1]-F[i];
+            }
+            else if(i==N)
+            {
+                 check[i]= A[i]*u_temp_x[i-1]+B[i]*u_temp_x[i]-F[i];
+            }
+            else
+                check[i]= A[i]*u_temp_x[i-1]+B[i]*u_temp_x[i]+C[i]*u_temp_x[i+1]-F[i];
         }
-        printf("CHECK_Y = %lf\n",Norm(check,M));
+        //printf("CHECK_Y = %.20lf\n",Norm(check,M));
         for(int i=0;i<=N;i++)
             u[i][j]=u_temp_x[i];
         }
 
         for(int i=1;i<N;i++)
         {
-            u[i][0]=S[0];
-            u[i][M]=S[M];
+            u[i][0]=S_1[0];
+            u[i][M]=S_1[M];
         }
 
         for(int i=1;i<N;i++)
@@ -366,19 +409,19 @@ void SolveTransport(double *S,double **u,double **u_n,int N,int M,double *x,doub
             }
         }
 
-        printf("Norm(check_aprox_1) = %.20lf\n",Norm(check_aprox,N,M));
+      //  printf("Norm(check_aprox_1) = %.20lf\n",Norm(check_aprox,N,M));
 
         for(int i=1;i<N;i++)
         {
             for(int j=1;j<M;j++)
             {
                 check_aprox[i][j]= ( (u[i][j]-u_n[i][j])/(tau) )
-                - ( (1.0/Re) * ( Laplas_x(u,i,j,hx) + Laplas_y(u,i,j,hy) ) )
+                - ( (1.0/Re) * ( Laplas_y(u_1_2,i,j,hy) ) )
+                - ( (1.0/Re) * ( Laplas_x(u,i,j,hx) + Laplas_x(u_n,i,j,hx) ) / 2.0 )
                 - RightPart(x[i],y[j],t);
             }
         }
-
-        printf("Norm(check_aprox_ne) = %.20lf\n",Norm(check_aprox,N,M));
+      //  printf("Norm(check_aprox) = %.20lf\n",Norm(check_aprox,N,M));
 
 
 
@@ -593,6 +636,13 @@ int main()
     for(int i=0;i<=n;i++)
         u[i]=new double[m+1];
 
+    double **r=new double*[n+1];
+    for(int i=0;i<=n;i++)
+        r[i]=new double[m+1];
+    double **r_ne=new double*[n+1];
+    for(int i=0;i<=n;i++)
+        r_ne[i]=new double[m+1];
+
     double **u_1_2=new double*[n+1];
     for(int i=0;i<=n;i++)
         u_1_2[i]=new double[m+1];
@@ -600,6 +650,18 @@ int main()
     double **_u=new double*[n+1];
     for(int i=0;i<=n;i++)
         _u[i]=new double[m+1];
+
+    double **u_touch=new double*[n+1];
+    for(int i=0;i<=n;i++)
+        u_touch[i]=new double[m+1];
+
+    double **us_1_2=new double*[n+1];
+    for(int i=0;i<=n;i++)
+        us_1_2[i]=new double[m+1];
+
+    double **check=new double*[n+1];
+    for(int i=0;i<=n;i++)
+        check[i]=new double[m+1];
 
 
     double **v=new double*[n+1];
@@ -636,6 +698,9 @@ int main()
         for(int j=0;j<=m;j++)
         {
             u[i][j]=0;
+            us_1_2[i][j]=0;
+            r[i][j]=0;
+            r_ne[i][j]=0;
         }
 
 
@@ -655,19 +720,42 @@ int main()
     double h = (b_y-a_y)/(M);
     double *u_one = new double[M+1];
     */
-    double *u_one_g = new double[m+1];
+    double *u_one_g_1 = new double[m+1];
+    double *u_one_g_1_2 = new double[m+1];
     /*for(int i=0;i<=M;i++){
         u_one[i]=0;
     }*/
 
     for(int t=0;t<=T;t++)
     {
+        for(int i=0;i<=n;i++)
+            for(int j=0;j<=m;j++)
+            {
+                _u[i][j]=0;
+            }
+
         for(int i=1;i<n;i++)
             for(int j=1;j<m;j++)
             {
                 _u[i][j]=Aprox((t+1)*tau,(t)*tau,(t+1.0/2.0)*tau,i,j,x,y);
             }
-        printf("Aprox = %lf\n",Norm(_u,n,m));
+        //printf("Aprox = %.20lf\n",Norm(_u,n,m));
+
+         for(int i=1;i<n;i++)
+            for(int j=1;j<m;j++)
+            {
+                _u[i][j]=Aprox_ne((t+1)*tau,(t)*tau,(t+1.0/2.0)*tau,i,j,x,y);
+            }
+       //printf("Aprox_ne = %.20lf\n",Norm(_u,n,m));
+/*
+        for(int i=0;i<=n;i++){
+            for(int j=0;j<=m;j++){
+                printf("%lf ",_u[i][j]);
+            }
+            printf("\n");
+        }
+*/
+
 
         /*
         FindSpeed(u_one,M,h,(t+1)*tau);
@@ -686,60 +774,186 @@ int main()
         //printf("\n");
         for(int i=0;i<=m;i++)
         {
-            u_one_g[i] = U_touch((t+1)*tau,y[i]);
+            u_one_g_1[i] = U_touch((t+1)*tau,y[i]);
+            u_one_g_1_2[i] = U_touch((t+1.0/2.0)*tau,y[i]);
             //printf("%lf\n",u_one_g[i]);
         }
         //printf("\n");
-        SolveTransport(u_one_g,u,u_n,n,m,x,y,(t+1.0/2.0)*tau);
-        /*for(int i=0;i<=n;i++)
+        /*for(int j=0;j<=m;j++)
+        {
+            printf("%e ",u_one_g[j]);
+        }
+    printf("\n");*/
+        SolveTransport(u_one_g_1,u_one_g_1_2,u,u_n,n,m,x,y,(t+1.0/2.0)*tau,us_1_2);
+
+
+
+
+        for(int i=0;i<=n;i++)
+        {
+          for(int j=0;j<=m;j++)
+          {
+            r[i][j]=0;
+            r_ne[i][j]=0;
+            u_n[i][j]=0;
+          }
+        }
+
+
+
+        //точное решение
+        for(int i=0;i<=n;i++)
             for(int j=0;j<=m;j++)
             {
-                u_1_2[i][j]=u[i][j]/2.0;
+                u_touch[i][j]=U_touch((t+1)*tau,y[j]);
             }
-        */
 
 
-        for(int j=1;j<m;j++){
-            for(int i=1;i<n;i++){
-                w[i][j]=u[i][j]-u_one_g[j];
-            }
-        }
 
-        printf("Norm(w) = %.14lf\n",Norm(w,n,m));
-        /*
-        printf("\n");
-        for(int i=0;i<=m;i++)
+
+        //численное решение на шаге 1/2
+        for(int i=0;i<=n;i++)
         {
-            printf("%lf\n",u[2][i]);
+            for(int j=0;j<=m;j++)
+            {
+                u_1_2[i][j]=U_touch((t+1.0/2.0)*tau,y[j]);
+                //u_1_2[i][j]=U_touch((t+1)*tau,y[j])/2;
+            }
         }
-        printf("\n");
-        //*/
-        /*
         for(int i=1;i<n;i++)
+        {
             for(int j=1;j<m;j++)
             {
-                v[i][j]=Aprox_ch_1_2(u_n,u_1_2,(t+1.0/2.0)*tau,i,j,x,y);
+                r[i][j] = u_1_2[i][j] - us_1_2[i][j];
             }
-        printf("||aprox_ch_1_2|| = %.14lf\n",Norm(v,n,m));
-        /*
-        printf("\n U PPP\n");
-        for(int j=0;j<=m;j++){
-            for(int i=0;i<=n;i++){
-                printf("%lf ",u[i][j]);
+        }
+        printf("Norm(w_1_2) = %e\n",Norm(r,n,m));
+
+
+
+
+
+        //невязка схемы расщепления на точном решении
+        for(int i=1;i<n;i++)
+        {
+            for(int j=1;j<m;j++)
+            {
+                r[i][j]= ( (u_touch[i][j]-u_n[i][j])/(tau) )
+                - ( (1.0/Re) * ( Laplas_y(u_1_2,i,j,hy) ) )
+                - ( (1.0/Re) * ( Laplas_x(u_touch,i,j,hx) + Laplas_x(u_n,i,j,hx) ) / 2.0 )
+                - RightPart(x[i],y[j],(t+1.0/2.0)*tau);
             }
-            printf("\n");
+        }
+        printf("Norm(r_split_ex) = %e\n",Norm(r,n,m));
+
+        //невязка схемы расщепления на численном решении
+        for(int i=1;i<n;i++)
+        {
+            for(int j=1;j<m;j++)
+            {
+                r[i][j]= ( (u[i][j]-u_n[i][j])/(tau) )
+                - ( (1.0/Re) * ( Laplas_y(us_1_2,i,j,hy) ) )
+                - ( (1.0/Re) * ( Laplas_x(u,i,j,hx) + Laplas_x(u_n,i,j,hx) ) / 2.0 )
+                - RightPart(x[i],y[j],(t+1.0/2.0)*tau);
+            }
+        }
+        printf("Norm(r_split_num) = %e\n",Norm(r,n,m));
+
+
+        //невязка неявной схемы на точном решении
+        for(int i=1;i<n;i++)
+        {
+            for(int j=1;j<m;j++)
+            {
+                r_ne[i][j]= ( (u_touch[i][j]-u_n[i][j])/(tau) )
+                - ( (1.0/Re) * ( Laplas_y(u_touch,i,j,hy) ) )
+                - ( (1.0/Re) * ( Laplas_x(u_touch,i,j,hx) ) )
+                - RightPart(0,y[j],(t+1)*tau);
+            }
+        }
+        printf("Norm(r_im_ex) = %e\n",Norm(r_ne,n,m));
+
+
+        for(int i=0;i<=n;i++)
+        {
+          for(int j=0;j<=m;j++)
+          {
+            if ( (i==0) || (i==n) || (j==0) || (j==m) )
+            {
+               u[i][j]=u_touch[i][j];
+            }
+          }
         }
 
-        printf("\n U Touch\n");
+        //невязка неявной схемы на численном решении
+        for(int i=1;i<n;i++)
+        {
+            for(int j=1;j<m;j++)
+            {
+                r_ne[i][j]= ( (u[i][j]-u_n[i][j])/(tau) )
+                - ( (1.0/Re) * ( Laplas_y(u,i,j,hy) ) )
+                - ( (1.0/Re) * ( Laplas_x(u,i,j,hx) ) )
+                - RightPart(0,y[j],(t+1)*tau);
+            }
+        }
+        printf("Norm(r_im_num) = %e\n",Norm(r_ne,n,m));
+
+
         for(int j=0;j<=m;j++){
             for(int i=0;i<=n;i++){
-                printf("%lf ",u_one_g[j]);
+             if ( (i==0) || (i==n) || (j==0) || (j==m) )
+             {
+               w[i][j]=0;
+             }
+            else {
+                w[i][j]=u[i][j]-u_touch[i][j]; }
             }
-            printf("\n");
+        }
+        printf("Norm(w) = %e\n",Norm(w,n,m));
 
+
+        //Оператор от погрешности
+        for(int i=1;i<n;i++)
+        {
+            for(int j=1;j<m;j++)
+            {
+                r_ne[i][j]=  (w[i][j]/(tau) )
+                - ( (1.0/Re) * ( Laplas_y(w,i,j,hy) ) )
+                - ( (1.0/Re) * ( Laplas_x(w,i,j,hx) ) );
+            }
+        }
+        printf("Norm(Aw) = %e\n",Norm(r_ne,n,m));
+
+
+        //Погрешность отдельных членов
+
+        for(int j=1;j<m;j++)
+        {
+            for(int i=1;i<n;i++)
+            {
+                r_ne[i][j]= //( (u_touch[i][j]-u_n[i][j])/(tau) )
+                //- ( (1.0/Re) * ( Laplas_y(u_touch,i,j,hy) ) )
+                - ( (1.0/Re) * ( Laplas_x(us_1_2,i,j,hx) ) );
+                //- RightPart(0,y[j],(t+1)*tau);
+            }
+        }
+        printf("Norm(!) = %e\n",Norm(r_ne,n,m));
+
+        for(int j=1;j<m;j++)
+        {
+            for(int i=1;i<n;i++)
+            {
+
+                //printf("%e ",- ( (1.0/Re) * ( Laplas_x(us_1_2,i,j,hx) ) )/*us_1_2[i][j]*/);
+            }
+            //printf("\n");
         }
 
-        //*/
+
+        return 0;
+
+
+
 
 
     }
